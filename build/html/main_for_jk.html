@@ -52,7 +52,7 @@
 ITRONでは、あらかじめ定義されている変数(レジスタ)に数値を代入したり数値を読み込むことによりGPIOの制御ができるようになっていました。
 Linuxでは、レジスタを直接制御するのではなく、仮想ファイルシステムを読み書きして制御するようになっています。
 まずはターミナルでGPIOの仮想ファイルシステムを理解します。
-次に実際に制御するコードを書き、最後に簡単なデバイスを作ってみます。</p>
+次に実際に制御するコードを書いてみます。</p>
 </div>
 <div class="section" id="id2">
 <h2>2. 評価環境について<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
@@ -264,14 +264,14 @@ GPIO番号に紐付いたディレクトリを確認し、存在しなければe
 </div>
 <div class="section" id="id10">
 <h3>4-3. 処理概要<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h3>
-<p>まず、unique_ptrで4-1, 4-2で作成したクラスのインスタンスをGPIO_17, GPIO_18それぞれ生成します。
-unique_ptrなのでmain文を抜けるとメモリは自動的に破棄されます。開始時のGPIO_17の入力レベルをcurrentValueで保持しておきます。
+<p>まず、4-1, 4-2で作成したクラスのインスタンスをGPIO_17とGPIO_18それぞれ生成します。
+unique_ptrはmain文を抜けるとメモリは自動的に解放されます。開始時のGPIO_17の入力レベルをcurrentValueで保持しておきます。
 while文内のpoll(ファイルディスクリプタのイベント待ち)で割り込みを監視します。while文は5分以上経過後の割り込み検出で抜けるようにタイマを設定しておきます。
 pollの設定時にGPIO_17のEdgeファイルに”both”を書き込み、立ち下がり立ち上がり両方のエッジで割り込みの検出を行います。
 pollに設定するのはファイルディスクリプタ（今回はGPIO_17のValueファイル）と要求イベント(今回はPOLLPRIで緊急イベントを要求)し、
 イベントの検出までpollで待ち受けます。Push Buttonを押したり離したりすると割り込みを検出してpollを抜けます。
 GPIO_17の入力レベルに変化があれば、50msまって再度確認し問題なければ立ち上がり検出ならGPIO_18をHighに設定。立ち下り検出ならLowに設定してLEDを制御します。
-While文を抜けるときて処理を終えるときはLEDを消灯します。</p>
+While文を抜けて処理を終えるときはLEDを消灯します。</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span>
 <span class="p">{</span>
   <span class="c1">// Create instances for each GPIO pin</span>
@@ -525,6 +525,11 @@ While文を抜けるときて処理を終えるときはLEDを消灯します。
 <span class="p">}</span>
 </pre></div>
 </div>
+</div>
+<div class="section" id="pollpollinpollpri">
+<h2>6. システムコールpollで返されるPOLLINとPOLLPRIの違い<a class="headerlink" href="#pollpollinpollpri" title="Permalink to this headline">¶</a></h2>
+<p>本コードではfeventで返されるビットはPOLLPRI(緊急データ)のみチェックしている。POLLINは読み出し可能なデータがあることを示すが、
+Edgeにnoneを書き込んでテストしたがValueにHigh/Lowの変化があってもpollは何もデータを検出できずにポーリングし続けた。</p>
 <table class="docutils citation" frame="void" id="ref" rules="none">
 <colgroup><col class="label" /><col /></colgroup>
 <tbody valign="top">
