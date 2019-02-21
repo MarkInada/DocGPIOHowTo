@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>How To Control GPIO on Linux &#8212; How To Control GPIO on Linux  documentation</title>
+    <title>LinuxのGPIO制御 &#8212; How To Control GPIO on Linux  documentation</title>
     <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
@@ -16,47 +16,531 @@
     <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="LinuxのGPIO制御" href="main_for_jk.html" /> 
+    <link rel="prev" title="How To Control GPIO on Linux" href="index.html" /> 
   </head><body>
-      <div class="header" role="banner"><h1 class="heading"><a href="#">
+      <div class="header" role="banner"><h1 class="heading"><a href="index.html">
           <span>How To Control GPIO on Linux  documentation</span></a></h1>
-        <h2 class="heading"><span>How To Control GPIO on Linux</span></h2>
+        <h2 class="heading"><span>LinuxのGPIO制御</span></h2>
       </div>
       <div class="topnav" role="navigation" aria-label="top navigation">
       
         <p>
-        <a class="uplink" href="#">Contents</a>
+        «&#160;&#160;<a href="index.html">How To Control GPIO on Linux</a>
         &#160;&#160;::&#160;&#160;
-        <a href="main_for_jk.html">LinuxのGPIO制御</a>&#160;&#160;»
+        <a class="uplink" href="index.html">Contents</a>
         </p>
 
       </div>
       <div class="content">
         
         
-  <div class="section" id="how-to-control-gpio-on-linux">
-<h1>How To Control GPIO on Linux<a class="headerlink" href="#how-to-control-gpio-on-linux" title="Permalink to this headline">¶</a></h1>
-<div class="toctree-wrapper compound">
-<p class="caption"><span class="caption-text">Contents:</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="main_for_jk.html">LinuxのGPIO制御</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="main_for_jk.html#id1">1. はじめに</a></li>
-<li class="toctree-l2"><a class="reference internal" href="main_for_jk.html#id2">2. 評価環境について</a></li>
-<li class="toctree-l2"><a class="reference internal" href="main_for_jk.html#gpio">3. GPIO 仮想ファイルシステム</a></li>
-<li class="toctree-l2"><a class="reference internal" href="main_for_jk.html#id7">4. GPIO制御のソースコード解説</a></li>
-<li class="toctree-l2"><a class="reference internal" href="main_for_jk.html#id11">5. 完成したソースコードサンプル</a></li>
-</ul>
-</li>
-</ul>
+  <div class="section" id="linuxgpio">
+<h1>LinuxのGPIO制御<a class="headerlink" href="#linuxgpio" title="Permalink to this headline">¶</a></h1>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">作成日:</th><td class="field-body">2019/2/7</td>
+</tr>
+<tr class="field-even field"><th class="field-name">作成者:</th><td class="field-body">Inada</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="id1">
+<h2>1. はじめに<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>本ページではLinuxでのGPIOの基本的な制御のメモです。
+ITRONでは、あらかじめ定義されている変数(レジスタ)に数値を代入したり数値を読み込むことによりGPIOの制御ができるようになっていました。
+Linuxでは、レジスタを直接制御するのではなく、仮想ファイルシステムを読み書きして制御するようになっています。
+まずはターミナルでGPIOの仮想ファイルシステムを理解します。
+次に実際に制御するコードを書き、最後に簡単なデバイスを作ってみます。</p>
+</div>
+<div class="section" id="id2">
+<h2>2. 評価環境について<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>・Raspberry Pi 3 (OS: Raspbian Version 8.0)</p>
+<p>・スマホアプリTermiusからWi-Fi経由のSSHで操作</p>
+<p>・抵抗、プッシュボタン、LED</p>
+</div>
+<div class="section" id="gpio">
+<h2>3. GPIO 仮想ファイルシステム<a class="headerlink" href="#gpio" title="Permalink to this headline">¶</a></h2>
+<p>ターミナル上でGPIOの仮想ファイルの動作を確認します。</p>
+<div class="section" id="id3">
+<h3>3-1. 仮想ファイルの生成<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<p>最初はgpioディレクトリ内にGPIOのPinに当てはまる仮想ファイルは以下の通り存在しません。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ ls /sys/class/gpio/
+<span class="nb">export</span>       gpiochip0    gpiochip128
+gpiochip100  unexport
+</pre></div>
+</div>
+<p>GPIO18ピンを制御するには”18”をexportという仮想ファイルに書き込み、Pin 18を制御する仮想ファイルを生成します。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ <span class="nb">echo</span> <span class="m">18</span> &gt; /sys/class/gpio/export
+</pre></div>
+</div>
+<p>結果、以下のようにgpio18という仮想ファイルが生成され、ここからPin 18の制御が可能になります。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ ls /sys/class/gpio/
+<span class="nb">export</span>    gpiochip0    gpiochip128
+gpio18    gpiochip100  unexport
+</pre></div>
 </div>
 </div>
-<div class="section" id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
-<ul class="simple">
-<li><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></li>
-<li><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></li>
-<li><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></li>
-</ul>
+<div class="section" id="id4">
+<h3>3-2. 仮想ファイルの概要<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h3>
+<p>gpio18ディレクトリ内の仮想ファイルは以下のようになっています。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ ls /sys/class/gpio/gpio18/
+active_low  direction   subsystem   value
+device      edge        uevent
+</pre></div>
+</div>
+<p>今回は3つ仮想ファイルのみ使います。</p>
+<p>・direction・・・ファイルで入出力方向の設定を行うことができます。(in/out/low/high)</p>
+<p>・value・・・ファイルで出力レベルの設定、入出力レベルの取得を行うことができます。(High(1)/Low(0))</p>
+<p>・edge・・・割り込みタイプの設定を行うことができます。(none/falling/rising/both)</p>
+<p>入出力方向の初期値などの詳細はLinuxカーネルドライバ仕様(<a class="reference internal" href="#ref" id="id5">[Ref]</a>)を参照してください。</p>
+</div>
+<div class="section" id="direction">
+<h3>3-3. direction - 入出力方向の設定<a class="headerlink" href="#direction" title="Permalink to this headline">¶</a></h3>
+<p>gpio18のdirection（入出力方向）を取得してみます。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ cat /sys/class/gpio/gpio18/direction
+in
+</pre></div>
+</div>
+<p>カーネルドライバ仕様(<a class="reference internal" href="#ref" id="id6">[Ref]</a>)の定義通り初期値の”in”が出力されます。directionはin/outの2状態を持ち、以下の3通りの設定方法があります。</p>
+<p>・in・・・入出力方向をin(入力)に設定します。入力レベルの取得を行うことができます。</p>
+<p>・low・・・入出力方向をout(出力)に、value(出力レベル)に0(LOW)レベルを設定します。出力レベルの取得/設定を行うことができます。</p>
+<p>・high・・・入出力方向をout(出力)に、value(出力レベル)に1(HIGH)レベルを設定します。出力レベルの取得/設定を行うことができます。</p>
+<p>ではdirectionをlow(出力方向、出力レベル０)に設定してみます。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ <span class="nb">echo</span> low &gt; /sys/class/gpio/gpio18/direction
+pi@raspberrypi ~ $ cat /sys/class/gpio/gpio18/direction
+out
+</pre></div>
+</div>
+<p>注意：InputもしくはOutput中の入出力の変更は・・</p>
+</div>
+<div class="section" id="value">
+<h3>3-4. value - 入出力レベルの設定<a class="headerlink" href="#value" title="Permalink to this headline">¶</a></h3>
+<p>gpio18のvalue（出力レベル）を取得してみます。3-3で入出力方向を”low(出力方向)”にしたので取得されるのは出力レベルです。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ cat /sys/class/gpio/gpio18/value
+<span class="m">0</span>
+</pre></div>
+</div>
+<p>現在は何も出力していないので0(Low)が出力されました。GPIO 18PinとGNDにLEDを繋げ、出力レベルを1(High)に設定してLEDが点灯するか確認します。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ <span class="nb">echo</span> <span class="m">1</span> &gt; /sys/class/gpio/gpio18/value
+</pre></div>
+</div>
+<p>LEDの点灯が確認できました。</p>
+<div><img height="120" src="_images/blockdiag-46b5ecec35330750cc4fcbaeab9a8f9a2938eee5.png" width="832" /></div></div>
+<div class="section" id="edge">
+<h3>3-5. edge - 割り込みタイプの設定<a class="headerlink" href="#edge" title="Permalink to this headline">¶</a></h3>
+<p>gpio17の仮想ファイルを生成し、gpio17のedge（割り込みタイプ）を取得してみます。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ <span class="nb">echo</span> <span class="m">17</span> &gt; /sys/class/gpio/export
+pi@raspberrypi ~ $ cat /sys/class/gpio/gpio17/edge
+none
+</pre></div>
+</div>
+<p>初期値のnoneが出力されました。noneは割り込みの検出を行いません。割り込みタイプは以下の通りです。</p>
+<p>・falling・・・立ち下がりエッジで割り込みの検出を行います。（今回は使わない。）</p>
+<p>・rising・・・立ち上がりエッジで割り込みの検出を行います。（今回は使わない。）</p>
+<p>・both・・・立ち下がり、立ち上がり両方のエッジで割り込みの検出を行います。</p>
+<p>今回はnoneとbothのみ使用し、bothを設定するPinを割り込み検出専用Pinとします。では割り込みタイプを”both”に設定します。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ <span class="nb">echo</span> both &gt; /sys/class/gpio/gpio17/edge
+pi@raspberrypi ~ $ cat /sys/class/gpio/gpio17/edge
+both
+</pre></div>
+</div>
+<p>Push Buttonを使って割り込みの動作確認をします。
+ボタンの一方の端子をヘッダーの 3.3V 出力ピンにつなぎ、もう一方の端子とGPIO 17を抵抗を通して接続します。
+ボタンが期待とおりに動作しているかを確認するために、Value ファイルを読み込み、0 であることを確認します。
+次に、ボタンを押下している間は Value が 1 になり、ボタンを離すと 0 になることを確認します。
+これで、ボタンを押下したときと離したときに割り込みを受け取ることができます。</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pi@raspberrypi ~ $ cat /sys/class/gpio/gpio17/value
+<span class="m">0</span>
+pi@raspberrypi ~ $ cat /sys/class/gpio/gpio17/value
+<span class="m">1</span>
+pi@raspberrypi ~ $ cat /sys/class/gpio/gpio17/value
+<span class="m">0</span>
+</pre></div>
+</div>
+<div><img height="120" src="_images/blockdiag-fb43a026bd20056b3390dfc37427a8376a0ca50b.png" width="1024" /></div><a class="reference internal image-reference" href="_images/image1.jpeg"><img alt="_images/image1.jpeg" class="align-center" src="_images/image1.jpeg" style="width: 640.0px; height: 480.0px;" /></a>
+<p><strong>ここまででGPIOの仮想ファイルの扱いは終了です。割り込みを使う準備もできたので次章で割り込みを使った簡単な制御コードを作ってみます。</strong></p>
+</div>
+</div>
+<div class="section" id="id7">
+<h2>4. GPIO制御のソースコード解説<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>手順3で使用した回路を使ってPush Buttonを押している間、LEDが点灯するコードをC++で書いてみます。
+GPIOファイル制御を行うクラスをまず作成し、それらをインスタンスメソッドとして使って割り込み検出からLED制御まで行います。</p>
+<div class="section" id="id8">
+<h3>4-1. 仮想ファイルの生成<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h3>
+<p>手順3-1で行った仮想ファイルの生成をGPIOクラスのインスタンス生成時にコンストラクタで行います。
+GPIO番号に紐付いたディレクトリを確認し、存在しなければexportファイルを使ってGPIOファイル群を生成します。
+生成されたdirection, valueファイルはm_gpioDirectionFileとm_gpioValueFileで保持し、各Pinのインスタンスからデータの設定および取得できるようにします。</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="n">class</span> <span class="n">GPIO</span>
+<span class="p">{</span>
+<span class="nl">public</span><span class="p">:</span>
+<span class="p">...</span>
+
+  <span class="n">GPIO</span><span class="p">(</span><span class="kt">int</span> <span class="n">pin</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">m_pin</span><span class="p">(</span><span class="n">pin</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">FileName</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_DIRECTORY_PATH</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">access</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">F_OK</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="kt">FILE</span><span class="o">*</span> <span class="n">ExportFile</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="n">GPIO_EXPORT_PATH</span><span class="p">,</span> <span class="s">&quot;w&quot;</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">ExportFile</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+      <span class="p">{</span>
+        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="n">fprintf</span><span class="p">(</span><span class="n">ExportFile</span><span class="p">,</span> <span class="s">&quot;%d&quot;</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+      <span class="n">fflush</span><span class="p">(</span><span class="n">ExportFile</span><span class="p">);</span>
+      <span class="n">fclose</span><span class="p">(</span><span class="n">ExportFile</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_DIRECTION_PATH</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+    <span class="n">m_gpioDirectionFile</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">O_WRONLY</span> <span class="o">|</span> <span class="n">O_CLOEXEC</span><span class="p">);</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_VALUE_PATH</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+    <span class="n">m_gpioValueFile</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_CLOEXEC</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">((</span><span class="n">m_gpioDirectionFile</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">||</span> <span class="p">(</span><span class="n">m_gpioValueFile</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="p">{</span>
+      <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id9">
+<h3>4-2. ファイルの設定と取得<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h3>
+<p>GPIO_18 の出力とGPIO_17の入力と割り込みの取得を行うので、以下の通り3つの制御用のメソッドを準備しました。</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="n">class</span> <span class="n">GPIO</span>
+<span class="p">{</span>
+<span class="nl">public</span><span class="p">:</span>
+<span class="p">...</span>
+
+  <span class="kt">void</span> <span class="n">setOutput</span><span class="p">(</span><span class="kt">bool</span> <span class="n">high</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">high</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">write</span><span class="p">(</span><span class="n">m_gpioDirectionFile</span><span class="p">,</span> <span class="s">&quot;high&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span>
+    <span class="p">{</span>
+      <span class="n">write</span><span class="p">(</span><span class="n">m_gpioDirectionFile</span><span class="p">,</span> <span class="s">&quot;low&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kt">bool</span> <span class="n">getValue</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">value</span><span class="p">;</span>
+
+    <span class="n">lseek</span><span class="p">(</span><span class="n">m_gpioValueFile</span><span class="p">,</span> <span class="n">SEEK_SET</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">read</span><span class="p">(</span><span class="n">m_gpioValueFile</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">==</span> <span class="sc">&#39;0&#39;</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kt">int</span> <span class="n">setEdge</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">FileName</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_EDGE_PATH</span><span class="p">,</span> <span class="n">m_pin</span><span class="p">);</span>
+    <span class="kt">int</span> <span class="n">EdgeFile</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">O_WRONLY</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">EdgeFile</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">write</span><span class="p">(</span><span class="n">EdgeFile</span><span class="p">,</span> <span class="s">&quot;both&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">EdgeFile</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="n">m_gpioValueFile</span><span class="p">;</span>
+  <span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id10">
+<h3>4-3. 処理概要<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h3>
+<p>まず、unique_ptrで4-1, 4-2で作成したクラスのインスタンスをGPIO_17, GPIO_18それぞれ生成します。
+unique_ptrなのでmain文を抜けるとメモリは自動的に破棄されます。開始時のGPIO_17の入力レベルをcurrentValueで保持しておきます。
+while文内のpoll(ファイルディスクリプタのイベント待ち)で割り込みを監視します。while文は5分以上経過後の割り込み検出で抜けるようにタイマを設定しておきます。
+pollの設定時にGPIO_17のEdgeファイルに”both”を書き込み、立ち下がり立ち上がり両方のエッジで割り込みの検出を行います。
+pollに設定するのはファイルディスクリプタ（今回はGPIO_17のValueファイル）と要求イベント(今回はPOLLPRIで緊急イベントを要求)し、
+イベントの検出までpollで待ち受けます。Push Buttonを押したり離したりすると割り込みを検出してpollを抜けます。
+GPIO_17の入力レベルに変化があれば、50msまって再度確認し問題なければ立ち上がり検出ならGPIO_18をHighに設定。立ち下り検出ならLowに設定してLEDを制御します。
+While文を抜けるときて処理を終えるときはLEDを消灯します。</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="c1">// Create instances for each GPIO pin</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span> <span class="n">m_outputPin</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span><span class="p">(</span><span class="n">new</span> <span class="n">GPIO</span><span class="p">(</span><span class="n">GPIO_NUMBER_FOR_TEST</span><span class="p">));</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span> <span class="n">m_interruptPin</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span><span class="p">(</span><span class="n">new</span> <span class="n">GPIO</span><span class="p">(</span><span class="n">GPIO_NUMBER_FOR_INTERRUPT</span><span class="p">));</span>
+
+  <span class="kt">bool</span> <span class="n">currentValue</span> <span class="o">=</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">getValue</span><span class="p">();</span>
+  <span class="kt">bool</span> <span class="n">nextValue</span><span class="p">;</span>
+
+  <span class="c1">// Test for 5 min</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">time_point</span> <span class="n">start</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">();</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">duration_cast</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">seconds</span><span class="o">&gt;</span>
+    <span class="p">((</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">())</span><span class="o">-</span><span class="n">start</span><span class="p">).</span><span class="n">count</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">300</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="c1">// Set poll for interruption</span>
+    <span class="k">struct</span> <span class="n">pollfd</span> <span class="n">pfd</span><span class="p">;</span>
+    <span class="n">pfd</span><span class="p">.</span><span class="n">fd</span> <span class="o">=</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">setEdge</span><span class="p">();</span>
+    <span class="n">pfd</span><span class="p">.</span><span class="n">events</span> <span class="o">=</span> <span class="n">POLLPRI</span><span class="p">;</span>
+
+    <span class="c1">// Polling</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">poll</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pfd</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pfd</span><span class="p">.</span><span class="n">revents</span> <span class="o">&amp;</span> <span class="n">POLLPRI</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">nextValue</span> <span class="o">=</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">getValue</span><span class="p">();</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">currentValue</span> <span class="o">!=</span> <span class="n">nextValue</span><span class="p">)</span>
+      <span class="p">{</span>
+         <span class="c1">// Wait for debounce/chattering time 50ms. This code doesn&#39;t assume continuous hits of push button.</span>
+         <span class="n">std</span><span class="o">::</span><span class="n">this_thread</span><span class="o">::</span><span class="n">sleep_for</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="mi">50</span><span class="p">));</span>
+
+         <span class="k">if</span> <span class="p">(</span><span class="n">nextValue</span> <span class="o">==</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">getValue</span><span class="p">())</span>
+         <span class="p">{</span>
+           <span class="n">currentValue</span> <span class="o">=</span> <span class="n">nextValue</span><span class="p">;</span>
+           <span class="k">if</span> <span class="p">(</span><span class="n">nextValue</span><span class="p">)</span>
+           <span class="p">{</span>
+             <span class="c1">// Turn LED on</span>
+             <span class="n">m_outputPin</span><span class="o">-&gt;</span><span class="n">setOutput</span><span class="p">(</span><span class="nb">true</span><span class="p">);</span>
+           <span class="p">}</span>
+           <span class="k">else</span>
+           <span class="p">{</span>
+             <span class="c1">// Turn LED off</span>
+             <span class="n">m_outputPin</span><span class="o">-&gt;</span><span class="n">setOutput</span><span class="p">(</span><span class="nb">false</span><span class="p">);</span>
+           <span class="p">}</span>
+         <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="c1">// Turn LED off at the end</span>
+  <span class="n">m_outputPin</span><span class="o">-&gt;</span><span class="n">setOutput</span><span class="p">(</span><span class="nb">false</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="id11">
+<h2>5. 完成したソースコードサンプル<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>完成したソースコードは以下。ラズパイにてviで実装後”g++ -std=c++11 gpio.cpp”でコンパイルして動作を確認しました。ボタン連打は非対応。</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+<span class="c1">///</span>
+<span class="c1">/// For simple testing GPIO.</span>
+<span class="c1">/// How to Compile: g++ -std=c++11 gpio.cpp</span>
+<span class="c1">///</span>
+<span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;fcntl.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;poll.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;memory&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;chrono&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;thread&gt;</span><span class="cp"></span>
+
+<span class="cp">#define GPIO_EXPORT_PATH &quot;/sys/class/gpio/export&quot;</span>
+<span class="cp">#define GPIO_DIRECTORY_PATH &quot;/sys/class/gpio/gpio%d&quot;</span>
+<span class="cp">#define GPIO_DIRECTION_PATH &quot;/sys/class/gpio/gpio%d/direction&quot;</span>
+<span class="cp">#define GPIO_VALUE_PATH &quot;/sys/class/gpio/gpio%d/value&quot;</span>
+<span class="cp">#define GPIO_EDGE_PATH &quot;/sys/class/gpio/gpio%d/edge&quot;</span>
+
+<span class="c1">// Set GPIO pin number that you will use</span>
+<span class="cp">#define GPIO_NUMBER_FOR_TEST 18</span>
+<span class="cp">#define GPIO_NUMBER_FOR_INTERRUPT 17</span>
+
+<span class="n">class</span> <span class="n">GPIO</span>
+<span class="p">{</span>
+<span class="nl">public</span><span class="p">:</span>
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="c1">/// @fn GPIO</span>
+  <span class="c1">///</span>
+  <span class="c1">/// Create GPIO file using /sys/class/gpio/export. Then open direction file and value file</span>
+  <span class="c1">///</span>
+  <span class="c1">/// @param Pin   a gpio pin number</span>
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="n">GPIO</span><span class="p">(</span><span class="kt">int</span> <span class="n">pin</span><span class="p">)</span>
+    <span class="o">:</span> <span class="n">m_pin</span><span class="p">(</span><span class="n">pin</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">FileName</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_DIRECTORY_PATH</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">access</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">F_OK</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="kt">FILE</span><span class="o">*</span> <span class="n">ExportFile</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="n">GPIO_EXPORT_PATH</span><span class="p">,</span> <span class="s">&quot;w&quot;</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">ExportFile</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+      <span class="p">{</span>
+        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+      <span class="p">}</span>
+      <span class="n">fprintf</span><span class="p">(</span><span class="n">ExportFile</span><span class="p">,</span> <span class="s">&quot;%d&quot;</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+      <span class="n">fflush</span><span class="p">(</span><span class="n">ExportFile</span><span class="p">);</span>
+      <span class="n">fclose</span><span class="p">(</span><span class="n">ExportFile</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_DIRECTION_PATH</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+    <span class="n">m_gpioDirectionFile</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">O_WRONLY</span> <span class="o">|</span> <span class="n">O_CLOEXEC</span><span class="p">);</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_VALUE_PATH</span><span class="p">,</span> <span class="n">pin</span><span class="p">);</span>
+    <span class="n">m_gpioValueFile</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_CLOEXEC</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">((</span><span class="n">m_gpioDirectionFile</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">||</span> <span class="p">(</span><span class="n">m_gpioValueFile</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="p">{</span>
+      <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="c1">/// @fn setOutput</span>
+  <span class="c1">///</span>
+  <span class="c1">/// Write high or low to direction file.</span>
+  <span class="c1">///</span>
+  <span class="c1">/// @high   Set output level whether high or not</span>
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="kt">void</span> <span class="n">setOutput</span><span class="p">(</span><span class="kt">bool</span> <span class="n">high</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">high</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">write</span><span class="p">(</span><span class="n">m_gpioDirectionFile</span><span class="p">,</span> <span class="s">&quot;high&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span>
+    <span class="p">{</span>
+      <span class="n">write</span><span class="p">(</span><span class="n">m_gpioDirectionFile</span><span class="p">,</span> <span class="s">&quot;low&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="c1">/// @fn getValue</span>
+  <span class="c1">///</span>
+  <span class="c1">/// Get value from value file</span>
+  <span class="c1">///</span>
+  <span class="c1">/// @return value is whether high or not</span>
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="kt">bool</span> <span class="n">getValue</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">value</span><span class="p">;</span>
+
+    <span class="n">lseek</span><span class="p">(</span><span class="n">m_gpioValueFile</span><span class="p">,</span> <span class="n">SEEK_SET</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">read</span><span class="p">(</span><span class="n">m_gpioValueFile</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">==</span> <span class="sc">&#39;0&#39;</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="c1">/// @fn setEdge</span>
+  <span class="c1">///</span>
+  <span class="c1">/// Set interruption type (both) to Edge file</span>
+  <span class="c1">///</span>
+  <span class="c1">/// @return Value File</span>
+  <span class="c1">////////////////////////////////////////////////////////////////////////////////////////////////////////</span>
+  <span class="kt">int</span> <span class="n">setEdge</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">FileName</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+
+    <span class="n">snprintf</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FileName</span><span class="p">),</span> <span class="n">GPIO_EDGE_PATH</span><span class="p">,</span> <span class="n">m_pin</span><span class="p">);</span>
+    <span class="kt">int</span> <span class="n">EdgeFile</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">FileName</span><span class="p">,</span> <span class="n">O_WRONLY</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">EdgeFile</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">write</span><span class="p">(</span><span class="n">EdgeFile</span><span class="p">,</span> <span class="s">&quot;both&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">EdgeFile</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="n">m_gpioValueFile</span><span class="p">;</span>
+  <span class="p">}</span>
+
+<span class="nl">private</span><span class="p">:</span>
+  <span class="kt">int</span> <span class="n">m_pin</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">m_gpioDirectionFile</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">m_gpioValueFile</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="c1">// Create instances for each GPIO pin</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span> <span class="n">m_outputPin</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span><span class="p">(</span><span class="n">new</span> <span class="n">GPIO</span><span class="p">(</span><span class="n">GPIO_NUMBER_FOR_TEST</span><span class="p">));</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span> <span class="n">m_interruptPin</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">GPIO</span><span class="o">&gt;</span><span class="p">(</span><span class="n">new</span> <span class="n">GPIO</span><span class="p">(</span><span class="n">GPIO_NUMBER_FOR_INTERRUPT</span><span class="p">));</span>
+
+  <span class="kt">bool</span> <span class="n">currentValue</span> <span class="o">=</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">getValue</span><span class="p">();</span>
+  <span class="kt">bool</span> <span class="n">nextValue</span><span class="p">;</span>
+
+  <span class="c1">// Test for 5 min</span>
+  <span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">time_point</span> <span class="n">start</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">();</span>
+  <span class="k">while</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">duration_cast</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">seconds</span><span class="o">&gt;</span>
+    <span class="p">((</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">())</span><span class="o">-</span><span class="n">start</span><span class="p">).</span><span class="n">count</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">300</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="c1">// Set poll for interruption</span>
+    <span class="k">struct</span> <span class="n">pollfd</span> <span class="n">pfd</span><span class="p">;</span>
+    <span class="n">pfd</span><span class="p">.</span><span class="n">fd</span> <span class="o">=</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">setEdge</span><span class="p">();</span>
+    <span class="n">pfd</span><span class="p">.</span><span class="n">events</span> <span class="o">=</span> <span class="n">POLLPRI</span><span class="p">;</span>
+
+    <span class="c1">// Polling</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">poll</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pfd</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_FAILURE</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pfd</span><span class="p">.</span><span class="n">revents</span> <span class="o">&amp;</span> <span class="n">POLLPRI</span><span class="p">)</span>
+    <span class="p">{</span>
+      <span class="n">nextValue</span> <span class="o">=</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">getValue</span><span class="p">();</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">currentValue</span> <span class="o">!=</span> <span class="n">nextValue</span><span class="p">)</span>
+      <span class="p">{</span>
+         <span class="c1">// Wait for debounce/chattering time 50ms. This code doesn&#39;t assume continuous hits of push button.</span>
+         <span class="n">std</span><span class="o">::</span><span class="n">this_thread</span><span class="o">::</span><span class="n">sleep_for</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="p">(</span><span class="mi">50</span><span class="p">));</span>
+
+         <span class="k">if</span> <span class="p">(</span><span class="n">nextValue</span> <span class="o">==</span> <span class="n">m_interruptPin</span><span class="o">-&gt;</span><span class="n">getValue</span><span class="p">())</span>
+         <span class="p">{</span>
+           <span class="n">currentValue</span> <span class="o">=</span> <span class="n">nextValue</span><span class="p">;</span>
+           <span class="k">if</span> <span class="p">(</span><span class="n">nextValue</span><span class="p">)</span>
+           <span class="p">{</span>
+             <span class="c1">// Turn LED on</span>
+             <span class="n">m_outputPin</span><span class="o">-&gt;</span><span class="n">setOutput</span><span class="p">(</span><span class="nb">true</span><span class="p">);</span>
+           <span class="p">}</span>
+           <span class="k">else</span>
+           <span class="p">{</span>
+             <span class="c1">// Turn LED off</span>
+             <span class="n">m_outputPin</span><span class="o">-&gt;</span><span class="n">setOutput</span><span class="p">(</span><span class="nb">false</span><span class="p">);</span>
+           <span class="p">}</span>
+         <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="c1">// Turn LED off at the end</span>
+  <span class="n">m_outputPin</span><span class="o">-&gt;</span><span class="n">setOutput</span><span class="p">(</span><span class="nb">false</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<table class="docutils citation" frame="void" id="ref" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[Ref]</td><td><em>(<a class="fn-backref" href="#id5">1</a>, <a class="fn-backref" href="#id6">2</a>)</em> 引用資料</td></tr>
+</tbody>
+</table>
+<ol class="arabic simple">
+<li>Linuxカーネルドライバ仕様 <a class="reference external" href="https://manual.atmark-techno.com/armadillo-4x0/armadillo-400_series_software_manual_ja-1.3.0/ch08.html">1 link</a>.</li>
+</ol>
+<ol class="arabic simple" start="2">
+<li>Raspberry PiのGPIO制御方法を確認する <a class="reference external" href="https://tool-lab.com/2013/12/raspi-gpio-controlling-command-1/">2 link</a>.</li>
+</ol>
+<ol class="arabic simple" start="3">
+<li>Linux GPIOを通して割り込みを取得する <a class="reference external" href="https://jp.linux.com/news/linuxcom-exclusive/415008-lco2014032602">3 link</a>.</li>
+</ol>
+</div>
 </div>
 
 
@@ -64,9 +548,9 @@
       <div class="bottomnav" role="navigation" aria-label="bottom navigation">
       
         <p>
-        <a class="uplink" href="#">Contents</a>
+        «&#160;&#160;<a href="index.html">How To Control GPIO on Linux</a>
         &#160;&#160;::&#160;&#160;
-        <a href="main_for_jk.html">LinuxのGPIO制御</a>&#160;&#160;»
+        <a class="uplink" href="index.html">Contents</a>
         </p>
 
       </div>
